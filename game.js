@@ -6,7 +6,8 @@
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const SAVE_KEY = "last_train_save_v2";
-const ENDINGS_KEY = "last_train_endings";
+const ENDINGS_KEY = "last_train_endings";        // старый ключ: читаем, чтобы не потерять концовки
+const PROGRESS_KEY = "last_train_progress";      // пройденные главы и концовки
 const CH2_HERO_KEY = "last_train_ch2_hero";      // герой в начале главы 2
 const CHECKPOINT_KEY = "last_train_checkpoint";  // точка возврата после смерти в главе 2
 
@@ -34,30 +35,85 @@ function haptic(type) {
 // Облако Telegram хранит данные на серверах Telegram, поэтому прогресс
 // не пропадает, даже если Telegram очищает память встроенного браузера.
 const cloud = tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9") ? tg.CloudStorage : null;
+const CLOUD_TIMEOUT = 10000; // сколько ждём ответа облака при запуске
+const cloudStatus = { loaded: null, lastError: null, pending: 0 };
+
+// Запись в облако: по каждому ключу одновременно идёт только одна запись.
+// Если пока она идёт, игра сохранилась ещё раз, — после неё отправится самая свежая версия.
+// При ошибке самая свежая версия отправляется снова, пока не дойдёт.
+const cloudQueue = {}; // ключ → { busy, next, tries }
+function cloudWrite(key, value) {
+  if (!cloud) return;
+  const q = cloudQueue[key] || (cloudQueue[key] = { busy: false, next: null, tries: 0 });
+  q.next = value;
+  q.tries = 0;
+  pump(key);
+}
+function pump(key) {
+  const q = cloudQueue[key];
+  if (q.busy || q.next === null) return;
+  const value = q.next;
+  q.next = null;
+  q.busy = true;
+  cloudStatus.pending++;
+  const done = (err, ok) => {
+    q.busy = false;
+    cloudStatus.pending--;
+    if (err || ok === false) {
+      cloudStatus.lastError = String(err || "не записалось");
+      // повторяем, только если за это время не появилось версии новее
+      if (q.next === null) {
+        q.next = value;
+        q.tries++;
+        setTimeout(() => pump(key), Math.min(10000, 1000 * q.tries));
+        return;
+      }
+    } else if (Object.values(cloudQueue).every((x) => x === q || (!x.busy && x.next === null))) {
+      cloudStatus.lastError = null;
+    }
+    pump(key);
+  };
+  try { cloud.setItem(key, value, done); } catch (e) { done(e); }
+}
 
 function storeSet(key, value) {
   try { localStorage.setItem(key, value); } catch (e) {}
-  if (cloud) try { cloud.setItem(key, value); } catch (e) {}
+  cloudWrite(key, value);
 }
-// возвращает все найденные копии: [из браузера, из облака]
-function storeGet(key) {
+
+// читает сразу все ключи: { ключ: [копия из браузера, копия из облака] }
+function storeGetAll(keys) {
   return new Promise((resolve) => {
-    let local = null;
-    try { local = localStorage.getItem(key); } catch (e) {}
-    if (!cloud) return resolve([local]);
-    const timer = setTimeout(() => resolve([local]), 2500);
+    const out = {};
+    keys.forEach((k) => {
+      let local = null;
+      try { local = localStorage.getItem(k); } catch (e) {}
+      out[k] = [local];
+    });
+    if (!cloud) { cloudStatus.loaded = "off"; return resolve(out); }
+    let finished = false;
+    const finish = (status) => { if (finished) return; finished = true; cloudStatus.loaded = status; resolve(out); };
+    const timer = setTimeout(() => finish("timeout"), CLOUD_TIMEOUT);
     try {
-      cloud.getItem(key, (err, value) => { clearTimeout(timer); resolve([local, err ? null : value]); });
-    } catch (e) { clearTimeout(timer); resolve([local]); }
+      cloud.getItems(keys, (err, values) => {
+        clearTimeout(timer);
+        if (err || !values) return finish("error");
+        keys.forEach((k) => out[k].push(values[k] || null));
+        finish("ok");
+      });
+    } catch (e) { clearTimeout(timer); finish("error"); }
   });
 }
 const parse = (v) => { try { return JSON.parse(v); } catch (e) { return null; } };
 
-// берёт самую свежую из копий
+// из нескольких копий сохранения берёт самую свежую
+function newest(copies) {
+  const good = copies.map(parse).filter((s) => s && (!s.scene || SCENES[s.scene]));
+  good.sort((a, b) => (b.t || 0) - (a.t || 0));
+  return good[0] || null;
+}
 async function loadNewest(key) {
-  const copies = (await storeGet(key)).map(parse).filter((s) => s && (!s.scene || SCENES[s.scene]));
-  copies.sort((a, b) => (b.t || 0) - (a.t || 0));
-  return copies[0] || null;
+  return newest((await storeGetAll([key]))[key]);
 }
 function storeState(key, s) {
   s.t = Date.now();
@@ -65,14 +121,19 @@ function storeState(key, s) {
 }
 const save = () => storeState(SAVE_KEY, state);
 
-async function loadEndings() {
-  const all = new Set();
-  (await storeGet(ENDINGS_KEY)).map(parse).forEach((arr) => (arr || []).forEach((e) => all.add(e)));
-  return [...all];
+// Прогресс по главам хранится отдельно и меняется только когда глава пройдена.
+// Даже если основное сохранение потеряется, пройденная глава не пропадёт.
+let progress = { endings: [], ch1: false, ch2: false, ch2Final: null };
+function saveProgress() {
+  progress.endings = endingsSeen;
+  progress.t = Date.now();
+  storeSet(PROGRESS_KEY, JSON.stringify(progress));
 }
 function rememberEnding(type) {
   if (!endingsSeen.includes(type)) endingsSeen.push(type);
-  storeSet(ENDINGS_KEY, JSON.stringify(endingsSeen));
+  if (type === "good" || type === "trick") progress.ch1 = true;
+  if (type === "home2") { progress.ch2 = true; progress.ch2Final = JSON.parse(JSON.stringify(state)); }
+  saveProgress();
 }
 
 // ---------- Герой ----------
@@ -625,25 +686,63 @@ async function showMenu() {
   $("new-game").disabled = true;
   $("loading").hidden = false;
 
-  [savedGame, endingsSeen, ch2Hero] = await Promise.all([loadNewest(SAVE_KEY), loadEndings(), loadNewest(CH2_HERO_KEY)]);
+  $("continue").hidden = true;
+  $("chapter2").hidden = true;
+  $("cloud-status").textContent = "";
 
-  // запасной вариант: сохранение стоит на хорошей концовке главы 1 — из него и берём героя главы 2
+  // всё читаем одним запросом к облаку
+  const all = await storeGetAll([SAVE_KEY, CH2_HERO_KEY, PROGRESS_KEY, ENDINGS_KEY]);
+  savedGame = newest(all[SAVE_KEY]);
+  ch2Hero = newest(all[CH2_HERO_KEY]);
+  const prog = newest(all[PROGRESS_KEY]) || {};
+  const endings = new Set(prog.endings || []);
+  all[ENDINGS_KEY].map(parse).forEach((arr) => (arr || []).forEach((e) => endings.add(e)));
+  endingsSeen = [...endings];
+  progress = {
+    endings: endingsSeen,
+    ch1: !!prog.ch1 || endingsSeen.includes("good") || endingsSeen.includes("trick"),
+    ch2: !!prog.ch2 || endingsSeen.includes("home2"),
+    ch2Final: prog.ch2Final || null,
+  };
+
+  // запасные варианты, если основное сохранение потерялось
+  if (!savedGame && progress.ch2Final) savedGame = progress.ch2Final;
   if (!ch2Hero && savedGame && ["good", "trick"].includes((SCENES[savedGame.scene] || {}).ending)) ch2Hero = savedGame;
 
   $("loading").hidden = true;
   $("new-game").disabled = false;
   $("continue").hidden = !savedGame;
   if (savedGame) $("continue").textContent = "▶️ Продолжить: " + describeSave(savedGame);
-  $("chapter2").hidden = !ch2Hero;
 
-  const ch1 = endingsSeen.some((e) => e === "good" || e === "trick");
-  const ch2 = endingsSeen.includes("home2");
+  // кнопка главы 2: «начать», если её ещё не начинали, иначе — скромное «переиграть»
+  const inCh2 = savedGame && savedGame.chapter === 2;
+  $("chapter2").hidden = !ch2Hero;
+  $("chapter2").textContent = progress.ch2 ? "🔁 Переиграть главу 2" : inCh2 ? "🔁 Начать главу 2 заново" : "🏠 Глава 2: Новый дом";
+  $("chapter2").className = "choice" + (progress.ch2 || inCh2 ? " ghost" : "");
+
   $("menu-progress").textContent =
-    `Глава 1 ${ch1 ? "✅" : "▫️"}   Глава 2 ${ch2 ? "✅" : ch1 ? "▶️" : "🔒"}   Свободная игра ${ch2 ? "⏳ скоро" : "🔒"}`;
+    `Глава 1 ${progress.ch1 ? "✅" : "▫️"}   Глава 2 ${progress.ch2 ? "✅" : progress.ch1 ? "▶️" : "🔒"}   Свободная игра ${progress.ch2 ? "⏳ скоро" : "🔒"}`;
   $("menu-endings").textContent = endingsSeen.length
     ? `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`
     : "";
+
+  const st = $("cloud-status");
+  $("cloud-retry").hidden = true;
+  if (cloudStatus.loaded === "ok") st.textContent = "☁️ Сохранения хранятся в облаке Telegram";
+  else if (cloudStatus.loaded === "off") st.textContent = "💾 Сохранения хранятся в этом браузере";
+  else {
+    st.textContent = "⚠️ Облако Telegram не ответило — показан прогресс с этого телефона.";
+    $("cloud-retry").hidden = false;
+  }
 }
+
+// значок «сохраняю…» — пока запись в облако не дошла, игру лучше не закрывать
+setInterval(() => {
+  const badge = $("save-badge");
+  if (cloudStatus.pending > 0) { badge.textContent = "☁️ сохраняю…"; badge.hidden = false; }
+  else if (cloudStatus.lastError) { badge.textContent = "⚠️ облако не сохранило, пробую ещё"; badge.hidden = false; }
+  else badge.hidden = true;
+}, 400);
 
 // подпись к кнопке «Продолжить»: где сейчас игрок
 function describeSave(s) {
@@ -672,6 +771,7 @@ $("continue").onclick = () => {
   lastArt = null;
   goTo(state.scene);
 };
+$("cloud-retry").onclick = showMenu;
 $("inv-btn").onclick = openInventory;
 $("inv-close").onclick = () => { $("inventory").hidden = true; };
 $("inventory").onclick = (ev) => { if (ev.target.id === "inventory") $("inventory").hidden = true; };

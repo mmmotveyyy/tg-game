@@ -74,6 +74,13 @@
     #menu-endings, #loading, #menu-progress { color: var(--muted); font-size: 14px; margin-top: 14px; }
     #menu-progress { white-space: pre-wrap; color: var(--text); }
     #version { color: var(--line); font-size: 12px; margin-top: 18px; }
+    #cloud-status { color: var(--muted); font-size: 13px; margin-top: 10px; }
+    #cloud-retry { margin-top: 8px; }
+    #save-badge {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+      padding: 4px 12px; font-size: 13px; color: var(--muted);
+    }
     #menu-snd { background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; margin-top: 8px; }
     #menu h1 {
       font-family: "PT Mono", monospace; letter-spacing: 3px; text-transform: uppercase;
@@ -186,7 +193,9 @@
       <div id="menu-progress"></div>
       <div id="menu-endings"></div>
       <button id="menu-snd"></button>
-      <div id="version">версия 4</div>
+      <div id="cloud-status"></div>
+      <button id="cloud-retry" class="small" hidden>🔄 Загрузить из облака ещё раз</button>
+      <div id="version">версия 5</div>
     </div>
 
     <!-- Игра -->
@@ -237,6 +246,8 @@
     </div>
   </div>
 
+  <div id="save-badge" hidden></div>
+
   <!-- Инвентарь -->
   <div id="inventory" hidden>
     <div class="sheet">
@@ -246,13 +257,13 @@
     </div>
   </div>
 
-  <!-- ?v=4 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
+  <!-- ?v=5 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
        чтобы Telegram не показывал старую копию из кэша -->
-  <script src="story.js?v=4"></script>
-  <script src="story2.js?v=4"></script>
-  <script src="art.js?v=4"></script>
-  <script src="art2.js?v=4"></script>
-  <script src="audio.js?v=4"></script>
-  <script src="game.js?v=4"></script>
+  <script src="story.js?v=5"></script>
+  <script src="story2.js?v=5"></script>
+  <script src="art.js?v=5"></script>
+  <script src="art2.js?v=5"></script>
+  <script src="audio.js?v=5"></script>
+  <script src="game.js?v=5"></script>
 </body>
 </html>
