@@ -30,9 +30,28 @@
     .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
     [hidden] { display: none !important; }
 
+    /* Картинки */
+    .art {
+      width: 100%; aspect-ratio: 2 / 1; border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--line); background: #0d0b08; margin-bottom: 14px;
+    }
+    .art svg { display: block; width: 100%; height: 100%; }
+    .fade { animation: fade .6s ease; }
+    @keyframes fade { from { opacity: 0; } }
+    .shake { animation: shake .35s ease; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); box-shadow: none; }
+      25% { transform: translateX(-6px); box-shadow: 0 0 0 2px var(--red); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-3px); }
+    }
+    .center { text-align: center; }
+
     /* Меню */
-    #menu { text-align: center; padding-top: 18vh; }
-    .logo { font-size: 64px; }
+    #menu { text-align: center; padding-top: 4vh; }
+    #menu-art { margin-bottom: 18px; }
+    #menu-endings, #loading { color: var(--muted); font-size: 14px; margin-top: 14px; }
+    #menu-snd { background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; margin-top: 8px; }
     #menu h1 {
       font-family: "PT Mono", monospace; letter-spacing: 3px; text-transform: uppercase;
       color: var(--accent); margin: 8px 0 4px; font-size: 28px;
@@ -52,13 +71,15 @@
     #hp-fill, #enemy-fill { background: var(--red); }
     #xp-fill { background: var(--accent); }
     .stats .row { display: flex; justify-content: space-between; }
-    .chips { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; }
+    .chips { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
     .chips span { white-space: nowrap; }
-    #inv-btn {
-      margin-left: auto; background: transparent; color: var(--text);
+    #inv-btn, #snd-btn {
+      background: transparent; color: var(--text);
       border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px;
       font: inherit; cursor: pointer;
     }
+    #inv-btn { margin-left: auto; }
+    .chips { flex-wrap: wrap; }
 
     /* Сцена */
     #title {
@@ -132,11 +153,14 @@
   <div class="wrap">
     <!-- Главное меню -->
     <div id="menu">
-      <div class="logo">🚇</div>
+      <div id="menu-art" class="art"></div>
       <h1>Последний поезд</h1>
       <p>Текстовая RPG о метро после конца света</p>
       <button id="continue" class="choice attack" hidden>▶️ Продолжить</button>
       <button id="new-game" class="choice">🆕 Новая игра</button>
+      <div id="loading">Загрузка сохранения…</div>
+      <div id="menu-endings"></div>
+      <button id="menu-snd"></button>
     </div>
 
     <!-- Игра -->
@@ -151,12 +175,16 @@
           <div class="bar"><div id="xp-fill"></div></div>
         </div>
         <div class="chips">
-          <span>🔸 <b id="patrons"></b> патр.</span>
+          <span title="Патроны">🔸 <b id="patrons"></b></span>
           <span>⚔️ <b id="attack"></b></span>
+          <span id="armor-chip" hidden>🦺 <b id="armor"></b></span>
+          <span id="ally-chip" hidden>🎯 Лиса</span>
           <button id="inv-btn">🎒 <span id="inv-count"></span></button>
+          <button id="snd-btn"></button>
         </div>
       </div>
 
+      <div id="art" class="art"></div>
       <div id="title"></div>
       <div id="notes"></div>
       <div id="text"></div>
@@ -181,6 +209,8 @@
   </div>
 
   <script src="story.js"></script>
+  <script src="art.js"></script>
+  <script src="audio.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
