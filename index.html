@@ -71,7 +71,9 @@
     /* Меню */
     #menu { text-align: center; padding-top: 4vh; }
     #menu-art { margin-bottom: 18px; }
-    #menu-endings, #loading { color: var(--muted); font-size: 14px; margin-top: 14px; }
+    #menu-endings, #loading, #menu-progress { color: var(--muted); font-size: 14px; margin-top: 14px; }
+    #menu-progress { white-space: pre-wrap; color: var(--text); }
+    #version { color: var(--line); font-size: 12px; margin-top: 18px; }
     #menu-snd { background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; margin-top: 8px; }
     #menu h1 {
       font-family: "PT Mono", monospace; letter-spacing: 3px; text-transform: uppercase;
@@ -181,8 +183,10 @@
       <button id="chapter2" class="choice" hidden>🏠 Глава 2: Новый дом</button>
       <button id="new-game" class="choice">🆕 Новая игра</button>
       <div id="loading">Загрузка сохранения…</div>
+      <div id="menu-progress"></div>
       <div id="menu-endings"></div>
       <button id="menu-snd"></button>
+      <div id="version">версия 4</div>
     </div>
 
     <!-- Игра -->
@@ -242,11 +246,13 @@
     </div>
   </div>
 
-  <script src="story.js"></script>
-  <script src="story2.js"></script>
-  <script src="art.js"></script>
-  <script src="art2.js"></script>
-  <script src="audio.js"></script>
-  <script src="game.js"></script>
+  <!-- ?v=4 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
+       чтобы Telegram не показывал старую копию из кэша -->
+  <script src="story.js?v=4"></script>
+  <script src="story2.js?v=4"></script>
+  <script src="art.js?v=4"></script>
+  <script src="art2.js?v=4"></script>
+  <script src="audio.js?v=4"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>

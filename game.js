@@ -39,10 +39,6 @@ function storeSet(key, value) {
   try { localStorage.setItem(key, value); } catch (e) {}
   if (cloud) try { cloud.setItem(key, value); } catch (e) {}
 }
-function storeRemove(key) {
-  try { localStorage.removeItem(key); } catch (e) {}
-  if (cloud) try { cloud.removeItem(key); } catch (e) {}
-}
 // возвращает все найденные копии: [из браузера, из облака]
 function storeGet(key) {
   return new Promise((resolve) => {
@@ -221,8 +217,10 @@ function goTo(id) {
   if (scene.checkpoint) storeState(CHECKPOINT_KEY, Object.assign({}, state, { fight: null }));
   if (id === "dead2") { Sound.death(); haptic("error"); }
 
+  // сохраняем всегда — даже на экране концовки, чтобы после перезапуска
+  // можно было продолжить с него (например, перейти к следующей главе)
+  save();
   if (scene.ending) {
-    storeRemove(SAVE_KEY);
     rememberEnding(scene.ending);
     if (scene.ending === "good" || scene.ending === "trick") {
       ch2Hero = JSON.parse(JSON.stringify(state));
@@ -230,8 +228,6 @@ function goTo(id) {
     }
     if (scene.ending === "bad" || scene.ending === "lost2") { Sound.death(); haptic("error"); }
     else { Sound.win(); haptic("success"); }
-  } else {
-    save();
   }
   render();
 }
@@ -631,17 +627,44 @@ async function showMenu() {
 
   [savedGame, endingsSeen, ch2Hero] = await Promise.all([loadNewest(SAVE_KEY), loadEndings(), loadNewest(CH2_HERO_KEY)]);
 
+  // запасной вариант: сохранение стоит на хорошей концовке главы 1 — из него и берём героя главы 2
+  if (!ch2Hero && savedGame && ["good", "trick"].includes((SCENES[savedGame.scene] || {}).ending)) ch2Hero = savedGame;
+
   $("loading").hidden = true;
   $("new-game").disabled = false;
   $("continue").hidden = !savedGame;
+  if (savedGame) $("continue").textContent = "▶️ Продолжить: " + describeSave(savedGame);
   $("chapter2").hidden = !ch2Hero;
+
+  const ch1 = endingsSeen.some((e) => e === "good" || e === "trick");
+  const ch2 = endingsSeen.includes("home2");
+  $("menu-progress").textContent =
+    `Глава 1 ${ch1 ? "✅" : "▫️"}   Глава 2 ${ch2 ? "✅" : ch1 ? "▶️" : "🔒"}   Свободная игра ${ch2 ? "⏳ скоро" : "🔒"}`;
   $("menu-endings").textContent = endingsSeen.length
     ? `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`
     : "";
 }
 
-$("new-game").onclick = newGame;
-$("chapter2").onclick = () => startChapter2(ch2Hero);
+// подпись к кнопке «Продолжить»: где сейчас игрок
+function describeSave(s) {
+  const scene = SCENES[s.scene];
+  const ch = `Глава ${s.chapter || 1}`;
+  if (scene.ending) return `${ch}, концовка`;
+  if (s.chapter === 2) return `${ch}, день ${s.day}`;
+  return `${ch}, «${scene.title}»`;
+}
+
+// спрашиваем, прежде чем стереть прогресс
+function confirmThen(text, action) {
+  if (!savedGame) { action(); return; }
+  if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast("6.2")) {
+    try { tg.showConfirm(text, (ok) => { if (ok) action(); }); return; } catch (e) {}
+  }
+  if (window.confirm(text)) action();
+}
+
+$("new-game").onclick = () => confirmThen("Начать новую игру? Текущее сохранение будет заменено.", newGame);
+$("chapter2").onclick = () => confirmThen("Начать главу 2 с начала? Текущее сохранение будет заменено.", () => startChapter2(ch2Hero));
 $("continue").onclick = () => {
   state = savedGame;
   if (!state.chapter) state.chapter = 1;
@@ -654,6 +677,11 @@ $("inv-close").onclick = () => { $("inventory").hidden = true; };
 $("inventory").onclick = (ev) => { if (ev.target.id === "inventory") $("inventory").hidden = true; };
 $("snd-btn").onclick = toggleSound;
 $("menu-snd").onclick = toggleSound;
+
+// перед сворачиванием/закрытием ещё раз записываем игру
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && state && !$("game").hidden) save();
+});
 
 updateSoundButtons();
 showMenu();
