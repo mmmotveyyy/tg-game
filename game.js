@@ -766,6 +766,7 @@ async function showMenu() {
     ch1: !!prog.ch1 || endingsSeen.includes("good") || endingsSeen.includes("trick"),
     ch2: !!prog.ch2 || endingsSeen.includes("home2"),
     ch2Final: prog.ch2Final || null,
+    intro: !!prog.intro,
   };
 
   // запасные варианты, если основное сохранение потерялось
@@ -795,6 +796,11 @@ async function showMenu() {
     ? `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`
     : "";
 
+  // первый запуск — рассказываем, что ждёт игрока
+  let seenIntro = progress.intro;
+  try { seenIntro = seenIntro || localStorage.getItem("lt-intro") === "1"; } catch (e) {}
+  if (!seenIntro) showIntro();
+
   const st = $("cloud-status");
   $("cloud-retry").hidden = true;
   if (cloudStatus.loaded === "ok") st.textContent = "☁️ Сохранения хранятся в облаке Telegram";
@@ -812,6 +818,72 @@ setInterval(() => {
   else if (cloudStatus.lastError) { badge.textContent = "⚠️ облако не сохранило, пробую ещё"; badge.hidden = false; }
   else badge.hidden = true;
 }, 400);
+
+// ---------- Окно «Что тебя ждёт» ----------
+const INTRO = [
+  { art: "train", title: "🚇 Последний поезд",
+    text: ["Двадцать лет после Вспышки. Люди живут в метро, а наверху — радиация и пепел.",
+           "Ты — сталкер из бункера «Сокол». От твоих решений зависит, выживут ли люди, которые на тебя надеются."] },
+  { art: "market", title: "📖 Глава 1 · Лекарство",
+    list: ["🗺️ Путь по туннелям, поверхности и заброшенным станциям",
+           "⚔️ Бои с кубиком: крысы, мародёры, секта, сторожевой робот",
+           "🛒 Лавка, патроны вместо денег, уровни героя",
+           "🎯 Напарница Лиса и побочные задания",
+           "🎭 4 концовки — одна из них секретная"] },
+  { art: "flood", title: "🌊 Глава 2 · Новый дом",
+    list: ["📅 «Сокол» тонет: 12 дней, чтобы подготовить новую станцию",
+           "🍞💧 Каждый день люди едят и пьют — следи за припасами",
+           "💥 Боссы с особыми ударами — вовремя защищайся",
+           "🏗️ Шкала показывает, сколько осталось до свободной игры"] },
+  { art: "newhome", title: "🏗️ Свободная игра · Убежище",
+    list: ["⏱️ Своё убежище в реальном времени, в духе Fallout Shelter",
+           "🧑‍🔧 Строй комнаты, объединяй их и ставь жителей по талантам",
+           "🎒 Вылазки за добычей, 🚨 крысы, пожары и налёты",
+           "🌙 Убежище живёт, даже когда игра закрыта",
+           "🎓 Обучение проведёт по всему шаг за шагом"] },
+  { art: "deep", title: "💡 Полезно знать",
+    list: ["☁️ Прогресс сохраняется в облаке Telegram",
+           "🔊 Музыка и звуки — кнопка в меню и в игре",
+           "📳 Телефон вибрирует при ударах и находках",
+           "▶️ Можно играть урывками — игра запомнит, где ты остановился"] },
+];
+let introPage = 0;
+function showIntro() {
+  introPage = 0;
+  drawIntro();
+  $("intro").hidden = false;
+}
+function drawIntro() {
+  const p = INTRO[introPage];
+  $("intro-art").innerHTML = ART[p.art]();
+  const body = $("intro-body");
+  body.innerHTML = "";
+  body.appendChild(el("h2", "", p.title));
+  (p.text || []).forEach((t) => body.appendChild(el("p", "", t)));
+  if (p.list) {
+    const ul = el("ul");
+    p.list.forEach((t) => ul.appendChild(el("li", "", t)));
+    body.appendChild(ul);
+  }
+  const dots = $("intro-dots");
+  dots.innerHTML = "";
+  INTRO.forEach((_, i) => dots.appendChild(el("i", i === introPage ? "on" : "")));
+  $("intro-prev").style.visibility = introPage ? "visible" : "hidden";
+  $("intro-next").textContent = introPage === INTRO.length - 1 ? "🚀 Начать" : "Дальше →";
+  $("intro-skip").hidden = introPage === INTRO.length - 1;
+}
+function closeIntro() {
+  $("intro").hidden = true;
+  try { localStorage.setItem("lt-intro", "1"); } catch (e) {}
+  if (!progress.intro) { progress.intro = true; saveProgress(); }
+}
+$("intro-next").onclick = () => {
+  Sound.click();
+  if (introPage < INTRO.length - 1) { introPage++; drawIntro(); } else closeIntro();
+};
+$("intro-prev").onclick = () => { if (introPage > 0) { introPage--; drawIntro(); } };
+$("intro-skip").onclick = closeIntro;
+$("about-btn").onclick = showIntro;
 
 // подпись к кнопке «Продолжить»: где сейчас игрок
 function describeSave(s) {

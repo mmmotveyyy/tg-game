@@ -6,7 +6,7 @@
   <title>Последний поезд</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
-  <link href="shelter.css?v=6" rel="stylesheet">
+  <link href="shelter.css?v=7" rel="stylesheet">
   <style>
     :root {
       --bg: #14110d;
@@ -47,6 +47,27 @@
       75% { transform: translateX(-3px); }
     }
     .center { text-align: center; }
+
+    /* Окно «Что тебя ждёт» */
+    #intro {
+      position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.8);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .intro-card {
+      width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
+      animation: pop .3s ease;
+    }
+    .intro-card .art { margin-bottom: 10px; }
+    #intro-body h2 { font-family: "PT Mono", monospace; color: var(--accent); font-size: 19px; margin: 4px 0 8px; }
+    #intro-body p { margin: 0 0 8px; font-size: 15px; }
+    #intro-body ul { margin: 0 0 8px; padding-left: 0; list-style: none; display: grid; gap: 5px; font-size: 15px; }
+    #intro-dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0; }
+    #intro-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+    #intro-dots i.on { background: var(--accent); }
+    .intro-nav { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+    .intro-nav .choice { text-align: center; }
+    #intro-skip { display: block; margin: 10px auto 0; background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
 
     /* Глава 2: припасы и шкала «Новый дом» */
     #ch2-stats { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 6px; }
@@ -194,10 +215,11 @@
       <div id="loading">Загрузка сохранения…</div>
       <div id="menu-progress"></div>
       <div id="menu-endings"></div>
+      <button id="about-btn" class="choice ghost">📖 Об игре: что тебя ждёт</button>
       <button id="menu-snd"></button>
       <div id="cloud-status"></div>
       <button id="cloud-retry" class="small" hidden>🔄 Загрузить из облака ещё раз</button>
-      <div id="version">версия 6</div>
+      <div id="version">версия 7</div>
     </div>
 
     <!-- Игра -->
@@ -253,6 +275,20 @@
 
   <div id="save-badge" hidden></div>
 
+  <!-- Окно «Что тебя ждёт» — при первом запуске и по кнопке «Об игре» -->
+  <div id="intro" hidden>
+    <div class="intro-card">
+      <div id="intro-art" class="art"></div>
+      <div id="intro-body"></div>
+      <div id="intro-dots"></div>
+      <div class="intro-nav">
+        <button id="intro-prev" class="choice ghost">←</button>
+        <button id="intro-next" class="choice attack">Дальше →</button>
+      </div>
+      <button id="intro-skip">Пропустить</button>
+    </div>
+  </div>
+
   <!-- Инвентарь -->
   <div id="inventory" hidden>
     <div class="sheet">
@@ -262,15 +298,16 @@
     </div>
   </div>
 
-  <!-- ?v=6 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
+  <!-- ?v=7 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
        чтобы Telegram не показывал старую копию из кэша -->
-  <script src="story.js?v=6"></script>
-  <script src="story2.js?v=6"></script>
-  <script src="art.js?v=6"></script>
-  <script src="art2.js?v=6"></script>
-  <script src="audio.js?v=6"></script>
-  <script src="shelter-data.js?v=6"></script>
-  <script src="shelter.js?v=6"></script>
-  <script src="game.js?v=6"></script>
+  <script src="story.js?v=7"></script>
+  <script src="story2.js?v=7"></script>
+  <script src="art.js?v=7"></script>
+  <script src="art2.js?v=7"></script>
+  <script src="audio.js?v=7"></script>
+  <script src="shelter-data.js?v=7"></script>
+  <script src="shelter-art.js?v=7"></script>
+  <script src="shelter.js?v=7"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>

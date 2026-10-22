@@ -42,9 +42,11 @@ const SHELTER = {
 // res — что производит, stat — какая характеристика ускоряет работу,
 // out — сколько даёт за цикл на уровнях 1/2/3, time — длина цикла,
 // cost — цена постройки (каждая следующая такая же дороже на 50%),
-// needPop — сколько жителей нужно, чтобы открыть постройку
+// needPop — сколько жителей нужно, чтобы открыть постройку.
+// Одинаковые комнаты одного уровня рядом на этаже объединяются (до 3 клеток):
+// в большой комнате больше мест, а урожай ещё и на 10% больше.
 const ROOMS = {
-  entrance: { name: "Вход",         icon: "🚪", stat: "str", slots: 2, cap: [4, 4, 4], fixed: true,
+  entrance: { name: "Вход",         icon: "🚪", stat: "str", slots: 2, cap: [4, 4, 4], fixed: true, noMerge: true,
               desc: "Гермоворота. Охрана отбивает налёты. Сюда возвращаются с вылазок." },
   power:    { name: "Генераторная", icon: "⚡", res: "power", stat: "str", slots: 3, out: [10, 15, 21], time: 60, cost: 100,
               desc: "Даёт энергию. Без неё остальные комнаты встают." },
@@ -62,8 +64,15 @@ const ROOMS = {
               desc: "Зовёт выживших из туннелей. Иногда приходят знаменитости." },
   gym:      { name: "Тренажёрка",   icon: "🏋️", res: "train", slots: 3, out: [1, 1, 1], time: 900, cost: 300, needPop: 14,
               desc: "Жители прокачивают выбранную характеристику (до 10)." },
+  bar:      { name: "Бар",          icon: "🍺", stat: "cha", slots: 2, mood: [6, 10, 14], cost: 220, needPop: 12,
+              desc: "Пока здесь кто-то работает, у всех жителей настроение лучше — а значит, и работа быстрее." },
+  guard:    { name: "Караулка",     icon: "🛡️", stat: "str", slots: 3, cost: 180, needPop: 12,
+              desc: "Караульные прибегают на любое происшествие и помогают отбиться." },
+  workshop: { name: "Мастерская",   icon: "🔧", res: "craft", stat: "int", slots: 3, out: [1, 1, 1], time: 900, cost: 350, needPop: 18,
+              desc: "Мастерит одежду или оружие. Чем выше уровень, тем ценнее вещи." },
 };
 const UPGRADE_MULT = [0, 1.5, 3]; // цена улучшения до 2-го и 3-го уровня (× цена постройки)
+const MERGE_BONUS = 1.1;          // объединённая комната даёт на 10% больше
 
 // ---------- Снаряжение ----------
 // Одежда повышает характеристики, оружие помогает в драках и на вылазках
@@ -136,10 +145,13 @@ const QUESTS = [
   { id: "q8",  text: "Надень на жителя снаряжение",          counter: "equip",    need: 1,  reward: { patrons: 80 } },
   { id: "q9",  text: "Достигни 15 жителей",                  counter: (S, A) => A.pop, need: 15, reward: { patrons: 150, box: 1 } },
   { id: "q10", text: "Выкопай новый этаж",                   counter: "dig",      need: 1,  reward: { patrons: 150 } },
+  { id: "q10m", text: "Построй две одинаковые комнаты рядом — они объединятся", counter: "merge", need: 1, reward: { patrons: 150, box: 1 } },
+  { id: "q10b", text: "Построй Бар или Караулку",            counter: (S, A) => (A.count.bar || 0) + (A.count.guard || 0), need: 1, reward: { patrons: 120 } },
   { id: "q11", text: "Построй Радиорубку",                   counter: (S, A) => A.count.radio || 0, need: 1, reward: { patrons: 150 } },
   { id: "q12", text: "Вернись с 3 вылазок",                  counter: "expedDone", need: 3, reward: { box: 2 } },
   { id: "q13", text: "Построй Тренажёрку",                   counter: (S, A) => A.count.gym || 0, need: 1, reward: { patrons: 200 } },
   { id: "q14", text: "Отбей 5 происшествий",                 counter: "incident", need: 5,  reward: { patrons: 250, box: 1 } },
+  { id: "q14w", text: "Смастери вещь в Мастерской",          counter: "craft",    need: 1,  reward: { patrons: 200 } },
   { id: "q15", text: "Достигни 25 жителей",                  counter: (S, A) => A.pop, need: 25, reward: { box: 3 } },
   { id: "q16", text: "Улучши 3 комнаты до 3-го уровня",      counter: (S, A) => A.lvl3, need: 3, reward: { patrons: 400 } },
   { id: "q17", text: "Накопи 1000 патронов",                 counter: (S) => S.patrons, need: 1000, reward: { box: 3 } },

@@ -38,21 +38,52 @@ body.in-shelter #save-badge { bottom: calc(76px + env(safe-area-inset-bottom)); 
     #120e0a;
   border: 1px solid var(--line); border-radius: 12px; padding: 0 6px 8px; overflow: hidden;
 }
-.sh-surface {
-  display: flex; justify-content: space-between; align-items: center;
-  margin: 0 -6px 8px; padding: 10px 12px 14px;
-  background: linear-gradient(#5a4c38, #2a2219 70%, #120e0a);
-  font-family: "PT Mono", monospace; font-size: 12px; color: #d8c9a8;
+/* поверхность с гермоворотами */
+.sh-surface { position: relative; margin: 0 -6px 0; height: 78px; overflow: hidden; }
+.sh-surface svg { display: block; width: 100%; height: 100%; }
+.sh-surface-label {
+  position: absolute; left: 10px; right: 10px; top: 6px; display: flex; justify-content: space-between;
+  font-family: "PT Mono", monospace; font-size: 11px; color: #e8dcc6; text-shadow: 0 1px 2px #000;
 }
-.floor { display: grid; grid-template-columns: 22px repeat(3, 1fr); gap: 5px; margin-bottom: 5px; }
+/* слой породы с трубой между поверхностью и первым этажом */
+.sh-floors {
+  position: relative; padding-top: 8px;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,.03) 0 2px, transparent 3px) 0 0 / 23px 19px,
+    radial-gradient(circle at 70% 60%, rgba(0,0,0,.35) 0 3px, transparent 4px) 0 0 / 31px 27px;
+}
+.floor {
+  position: relative; display: grid; grid-template-columns: 22px repeat(3, 1fr); gap: 5px; margin-bottom: 9px;
+}
+.floor::after { /* труба и кабели вдоль этажа */
+  content: ""; position: absolute; left: 22px; right: 0; bottom: -7px; height: 4px; border-radius: 2px;
+  background: linear-gradient(#5a4a38, #2a2219); box-shadow: 0 -2px 0 rgba(0,0,0,.4);
+}
 .floor-n {
-  font-family: "PT Mono", monospace; font-size: 11px; color: var(--muted);
-  display: flex; align-items: center; justify-content: center;
-  background: #0a0806; border-radius: 4px;
+  position: relative; z-index: 2;
+  font-family: "PT Mono", monospace; font-size: 10px; color: #9a8b74;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 4px;
 }
+/* шахта лифта */
+.sh-shaft {
+  position: absolute; left: 0; top: 8px; bottom: 0; width: 22px; z-index: 1;
+  background: linear-gradient(90deg, #0a0806 0 3px, #1a1510 3px 19px, #0a0806 19px);
+  border-radius: 4px; overflow: hidden;
+}
+.sh-shaft::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #3a3026; }
+.sh-cabin {
+  position: absolute; left: 2px; top: 30px; width: 18px; height: 30px; border-radius: 3px;
+  background: linear-gradient(#5a4c38, #3a3026); border: 1px solid #8a7a5a; box-shadow: 0 0 8px rgba(217,164,65,.35);
+  animation: lift ease-in-out infinite alternate;
+}
+.sh-cabin .dw { left: 3px; bottom: 1px; animation: none; transform: scale(.85); }
+@keyframes lift { 0%, 15% { transform: translateY(0); } 85%, 100% { transform: translateY(calc((var(--floors) - 1) * 105px)); } }
+/* старые рельсы под станцией */
+.sh-rails { margin: 8px -6px -8px; height: 46px; }
+.sh-rails svg { display: block; width: 100%; height: 100%; }
 
 .room, .cell-empty {
-  position: relative; height: 96px; border-radius: 8px; overflow: hidden; cursor: pointer;
+  position: relative; height: 96px; z-index: 2; border-radius: 8px; overflow: hidden; cursor: pointer;
   -webkit-tap-highlight-color: transparent; user-select: none;
 }
 .room {
@@ -78,14 +109,44 @@ body.in-shelter #save-badge { bottom: calc(76px + env(safe-area-inset-bottom)); 
 .t-radio    { --a: #a98ad9; --bg: #2a1d38; }
 .t-gym      { --a: #9aa6b8; --bg: #23272d; }
 
-.room-icon { position: absolute; right: 2px; bottom: 6px; font-size: 38px; opacity: .16; pointer-events: none; }
+.room-art-wrap { position: absolute; inset: 0; pointer-events: none; opacity: .92; }
+.room-art { display: block; width: 100%; height: 100%; }
+.room.lvl3 { border-color: color-mix(in srgb, var(--a) 80%, #fff 10%); }
+.room.lvl3 .lvl { text-shadow: 0 0 6px var(--a); }
+.t-bar      { --a: #ff8ad8; --bg: #2e1a22; }
+.t-guard    { --a: #c9a35a; --bg: #2a2418; }
+.t-workshop { --a: #b8a07a; --bg: #2a2520; }
+.sh-merged { color: var(--accent); font-size: 14px; }
+.sh-merge-tag { color: var(--accent); font-size: 12px; font-weight: 400; }
+
+/* ---------- Обучение ---------- */
+#sh-tut { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+#sh-tut .tut-block { position: fixed; pointer-events: auto; background: transparent; }
+#sh-tut-hole {
+  position: fixed; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.62), 0 0 0 2px var(--accent), 0 0 18px var(--accent);
+  animation: tutPulse 1.4s ease-in-out infinite;
+}
+@keyframes tutPulse { 50% { box-shadow: 0 0 0 9999px rgba(0,0,0,.62), 0 0 0 3px #ffd98a, 0 0 26px #ffd98a; } }
+#sh-tut-bubble {
+  position: fixed; pointer-events: auto; max-width: 536px; margin: 0 auto;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.6); animation: pop .25s ease;
+}
+#sh-tut-bubble p { margin: 6px 0 10px; font-size: 15px; }
+.tut-step { font-family: "PT Mono", monospace; font-size: 12px; color: var(--accent); }
+.tut-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .room-head {
   position: relative; display: flex; justify-content: space-between; gap: 2px;
   padding: 5px 6px 0; font-size: 11px; line-height: 1.2; color: color-mix(in srgb, var(--a) 70%, #fff);
 }
 .room-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lvl { font-family: "PT Mono", monospace; color: var(--a); }
-.room-info { position: absolute; left: 6px; bottom: 6px; font-size: 11px; color: var(--muted); }
+.room-info {
+  position: absolute; left: 4px; bottom: 4px; z-index: 1; font-size: 11px; color: #e8dcc6;
+  background: rgba(0,0,0,.6); border-radius: 4px; padding: 0 4px;
+}
+.room-head span, .room-head .lvl { text-shadow: 0 1px 2px #000, 0 0 4px #000; }
 .room-bar { position: absolute; left: 6px; right: 6px; bottom: 5px; height: 4px; background: rgba(0,0,0,.55); border-radius: 2px; overflow: hidden; }
 .room-bar i { display: block; height: 100%; width: 0; background: var(--a); transition: width .25s linear; }
 .room-people { position: absolute; left: 0; right: 0; bottom: 12px; height: 28px; }
