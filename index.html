@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Последний поезд</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #14110d;
+      --panel: #1f1a14;
+      --line: #3a3026;
+      --text: #e8dcc6;
+      --muted: #9a8b74;
+      --accent: #d9a441;
+      --red: #c8473a;
+      --green: #7fa65a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body {
+      font-family: "PT Sans", system-ui, sans-serif;
+      font-size: 17px; line-height: 1.5;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at top, #2a2118 0%, transparent 60%),
+        var(--bg);
+    }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+    [hidden] { display: none !important; }
+
+    /* Меню */
+    #menu { text-align: center; padding-top: 18vh; }
+    .logo { font-size: 64px; }
+    #menu h1 {
+      font-family: "PT Mono", monospace; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--accent); margin: 8px 0 4px; font-size: 28px;
+    }
+    #menu p { color: var(--muted); margin: 0 0 32px; }
+
+    /* Панель героя */
+    .stats {
+      position: sticky; top: 0; z-index: 5;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 10px 12px; margin-bottom: 14px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+      font-family: "PT Mono", monospace; font-size: 13px;
+    }
+    .bar { height: 6px; background: #000; border-radius: 3px; overflow: hidden; margin-top: 3px; }
+    .bar > div { height: 100%; transition: width .3s; }
+    #hp-fill, #enemy-fill { background: var(--red); }
+    #xp-fill { background: var(--accent); }
+    .stats .row { display: flex; justify-content: space-between; }
+    .chips { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; }
+    .chips span { white-space: nowrap; }
+    #inv-btn {
+      margin-left: auto; background: transparent; color: var(--text);
+      border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px;
+      font: inherit; cursor: pointer;
+    }
+
+    /* Сцена */
+    #title {
+      font-family: "PT Mono", monospace; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 1px; font-size: 20px; margin: 4px 0 10px;
+    }
+    #text { white-space: pre-line; margin-bottom: 16px; }
+    #notes .note {
+      background: rgba(217,164,65,.1); border-left: 3px solid var(--accent);
+      padding: 6px 10px; margin-bottom: 6px; border-radius: 4px; font-size: 15px;
+      animation: pop .3s ease;
+    }
+    #notes { margin-bottom: 10px; }
+    @keyframes pop { from { opacity: 0; transform: translateY(-4px); } }
+
+    /* Враг */
+    #enemy {
+      background: rgba(200,71,58,.08); border: 1px solid rgba(200,71,58,.4);
+      border-radius: 12px; padding: 10px 12px; margin-bottom: 14px;
+    }
+    #enemy .row { display: flex; justify-content: space-between; font-weight: 700; }
+    #fight-log { font-family: "PT Mono", monospace; font-size: 14px; margin-top: 8px; color: var(--muted); }
+    #fight-log div:first-child { color: var(--text); }
+
+    /* Кнопки */
+    #choices { display: flex; flex-direction: column; gap: 10px; padding-bottom: 24px; }
+    .choice {
+      width: 100%; text-align: left; font: inherit; color: var(--text);
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 13px 14px; cursor: pointer; transition: border-color .15s, transform .05s;
+    }
+    .choice:hover { border-color: var(--accent); }
+    .choice:active { transform: scale(.98); }
+    .choice:disabled { opacity: .4; cursor: not-allowed; }
+    .choice.attack { background: var(--accent); color: #1a140c; border-color: var(--accent); font-weight: 700; text-align: center; }
+    .choice.ghost { background: transparent; color: var(--muted); }
+    #menu .choice { text-align: center; margin-bottom: 10px; }
+
+    .ending {
+      text-align: center; font-family: "PT Mono", monospace; font-size: 18px;
+      padding: 14px; border-radius: 10px; border: 1px solid var(--line);
+    }
+    .ending.good { color: var(--green); border-color: var(--green); }
+    .ending.rich { color: var(--accent); border-color: var(--accent); }
+    .ending.bad  { color: var(--red);   border-color: var(--red); }
+
+    /* Инвентарь */
+    #inventory {
+      position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.7);
+      display: flex; align-items: flex-end; justify-content: center;
+    }
+    .sheet {
+      width: 100%; max-width: 560px; max-height: 80vh; overflow-y: auto;
+      background: var(--panel); border-top: 1px solid var(--line);
+      border-radius: 16px 16px 0 0; padding: 16px;
+    }
+    .sheet h2 { margin: 0 0 12px; font-family: "PT Mono", monospace; color: var(--accent); font-size: 18px; }
+    .inv-item { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .inv-icon { font-size: 28px; }
+    .inv-info { flex: 1; }
+    .inv-name { font-weight: 700; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .small {
+      font: inherit; font-size: 14px; background: var(--accent); color: #1a140c;
+      border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+    }
+    .small:disabled { opacity: .4; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Главное меню -->
+    <div id="menu">
+      <div class="logo">🚇</div>
+      <h1>Последний поезд</h1>
+      <p>Текстовая RPG о метро после конца света</p>
+      <button id="continue" class="choice attack" hidden>▶️ Продолжить</button>
+      <button id="new-game" class="choice">🆕 Новая игра</button>
+    </div>
+
+    <!-- Игра -->
+    <div id="game" hidden>
+      <div class="stats">
+        <div>
+          <div class="row"><span>❤️ Здоровье</span><span id="hp-text"></span></div>
+          <div class="bar"><div id="hp-fill"></div></div>
+        </div>
+        <div>
+          <div class="row"><span id="xp-text"></span><span>опыт</span></div>
+          <div class="bar"><div id="xp-fill"></div></div>
+        </div>
+        <div class="chips">
+          <span>🔸 <b id="patrons"></b> патр.</span>
+          <span>⚔️ <b id="attack"></b></span>
+          <button id="inv-btn">🎒 <span id="inv-count"></span></button>
+        </div>
+      </div>
+
+      <div id="title"></div>
+      <div id="notes"></div>
+      <div id="text"></div>
+
+      <div id="enemy" hidden>
+        <div class="row"><span id="enemy-name"></span><span id="enemy-hp"></span></div>
+        <div class="bar"><div id="enemy-fill"></div></div>
+        <div id="fight-log"></div>
+      </div>
+
+      <div id="choices"></div>
+    </div>
+  </div>
+
+  <!-- Инвентарь -->
+  <div id="inventory" hidden>
+    <div class="sheet">
+      <h2>🎒 Рюкзак</h2>
+      <div id="inv-list"></div>
+      <button id="inv-close" class="choice" style="margin-top:14px;text-align:center">Закрыть</button>
+    </div>
+  </div>
+
+  <script src="story.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
