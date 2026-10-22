@@ -193,7 +193,7 @@ const ART = (() => {
   }
 
   // ---------- картинки сцен ----------
-  return {
+  const pics = {
     train: () => wrap(
       tunnel() +
       `<polygon points="150,140 210,140 300,180 60,180" fill="#ffe0a0" opacity=".12">${flicker(2.5)}</polygon>` +
@@ -224,9 +224,9 @@ const ART = (() => {
       const r = rng(11);
       let s = tunnel();
       for (let i = 0; i < 16; i++) {
-        const x = 70 + r() * 220, y = 118 + r() * 50, sc = 0.5 + (y - 118) / 60;
-        s += `<ellipse cx="${x.toFixed(0)}" cy="${(y + 5 * sc).toFixed(0)}" rx="${(12 * sc).toFixed(1)}" ry="${(6 * sc).toFixed(1)}" fill="${DARK}"/>`;
-        s += eyes(x.toFixed(0), y.toFixed(0), sc, "gR", "#ff7060", (2 + r() * 3).toFixed(1));
+        const x = Math.round(70 + r() * 220), y = Math.round(118 + r() * 50), sc = 0.5 + (y - 118) / 60;
+        s += `<ellipse cx="${x}" cy="${(y + 5 * sc).toFixed(0)}" rx="${(12 * sc).toFixed(1)}" ry="${(6 * sc).toFixed(1)}" fill="${DARK}"/>`;
+        s += eyes(x, y, sc, "gR", "#ff7060", (2 + r() * 3).toFixed(1));
       }
       return wrap(s + tint("#c8473a", 0.06));
     },
@@ -466,4 +466,8 @@ const ART = (() => {
       tint("#c8473a", 0.07)
     ),
   };
+
+  // инструменты для рисования — ими пользуется art2.js (картинки главы 2)
+  pics.kit = { W, H, DARK, rng, wrap, flicker, glow, tint, tunnel, figure, robe, eyes, ash, drips, skyline, fire, candle, stationWall, lights, robot, cartridges, medcase };
+  return pics;
 })();

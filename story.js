@@ -419,7 +419,7 @@ const SCENES = {
     choices: [
       { text: "💰 Продать лекарство", needNotFlag: "lisa", take: "medicine", patrons: 200, to: "ending_rich" },
       { text: "💰 Продать лекарство", needFlag: "lisa", to: "lisa_stops" },
-      { text: "🃏 Подсунуть Сэму пустой кейс", need: "fakecase", take: "fakecase", patrons: 200, to: "sam_tricked" },
+      { text: "🃏 Подсунуть Сэму пустой кейс", need: "fakecase", take: "fakecase", patrons: 200, flag: "trickedSam", to: "sam_tricked" },
       { text: "✋ «Оно не продаётся»", to: "sam_angry" },
     ],
   },

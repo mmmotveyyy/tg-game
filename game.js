@@ -1,15 +1,19 @@
 // =====================================================================
 //  ДВИЖОК ИГРЫ: состояние героя, переходы между сценами, бои, уровни,
-//  сохранения (в облаке Telegram + в браузере), картинки и музыка
+//  припасы главы 2, сохранения (в облаке Telegram + в браузере),
+//  картинки и музыка
 // =====================================================================
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const SAVE_KEY = "last_train_save_v2";
 const ENDINGS_KEY = "last_train_endings";
+const CH2_HERO_KEY = "last_train_ch2_hero";      // герой в начале главы 2
+const CHECKPOINT_KEY = "last_train_checkpoint";  // точка возврата после смерти в главе 2
 
 let state = null;     // всё о текущей игре; state.fight — текущий бой
 let notes = [];       // сообщения, показанные над текстом сцены
 let endingsSeen = []; // открытые концовки (сохраняются между играми)
+let ch2Hero = null;   // с каким героем начинается глава 2
 let lastArt = null;
 
 // ---------- Telegram ----------
@@ -53,19 +57,21 @@ function storeGet(key) {
 }
 const parse = (v) => { try { return JSON.parse(v); } catch (e) { return null; } };
 
-function save() {
-  state.t = Date.now();
-  storeSet(SAVE_KEY, JSON.stringify(state));
-}
-async function loadSave() {
-  // берём самую свежую из копий
-  const copies = (await storeGet(SAVE_KEY)).map(parse).filter((s) => s && SCENES[s.scene]);
+// берёт самую свежую из копий
+async function loadNewest(key) {
+  const copies = (await storeGet(key)).map(parse).filter((s) => s && (!s.scene || SCENES[s.scene]));
   copies.sort((a, b) => (b.t || 0) - (a.t || 0));
   return copies[0] || null;
 }
+function storeState(key, s) {
+  s.t = Date.now();
+  storeSet(key, JSON.stringify(s));
+}
+const save = () => storeState(SAVE_KEY, state);
+
 async function loadEndings() {
   const all = new Set();
-  (await storeGet(ENDINGS_KEY)).map(parse).forEach((list) => (list || []).forEach((e) => all.add(e)));
+  (await storeGet(ENDINGS_KEY)).map(parse).forEach((arr) => (arr || []).forEach((e) => all.add(e)));
   return [...all];
 }
 function rememberEnding(type) {
@@ -76,6 +82,7 @@ function rememberEnding(type) {
 // ---------- Герой ----------
 function newGame() {
   state = {
+    chapter: 1,
     scene: START.scene,
     hp: START.hp,
     maxHp: START.hp,
@@ -88,6 +95,32 @@ function newGame() {
     fight: null,
   };
   notes = [];
+  lastArt = null;
+  goTo(state.scene);
+}
+
+// глава 2 начинается с героем из конца главы 1
+function startChapter2(hero) {
+  const keepFlags = ["lisa", "trickedSam"];
+  state = {
+    chapter: 2,
+    scene: "ch2_intro",
+    hp: hero.maxHp,
+    maxHp: hero.maxHp,
+    baseAttack: hero.baseAttack,
+    level: hero.level,
+    xp: hero.xp,
+    patrons: Math.min(hero.patrons, 60), // остальное ушло в общую казну «Сокола»
+    items: hero.items.filter((id) => !["medicine", "fakecase", "fuse"].includes(id)),
+    flags: Object.fromEntries(keepFlags.filter((f) => hero.flags[f]).map((f) => [f, true])),
+    day: 1,
+    food: CHAPTER2.food,
+    water: CHAPTER2.water,
+    people: CHAPTER2.people,
+    fight: null,
+  };
+  notes = [];
+  lastArt = null;
   goTo(state.scene);
 }
 
@@ -125,6 +158,26 @@ function addXp(amount) {
   }
 }
 
+// глава 2: проходит день — жители тратят еду и воду
+function passDay(days) {
+  for (let i = 0; i < days; i++) {
+    state.day++;
+    const need = Math.ceil(state.people / 10);
+    const waterNeed = state.flags.goalWater ? Math.ceil(need / 2) : need;
+    state.food -= need;
+    state.water -= waterNeed;
+    let msg = `📅 День ${state.day}: −${need} еды, −${waterNeed} воды.`;
+    if (state.food < 0 || state.water < 0) {
+      state.food = Math.max(0, state.food);
+      state.water = Math.max(0, state.water);
+      state.people -= CHAPTER2.leaveOnHunger;
+      msg += ` Припасов не хватило — ${CHAPTER2.leaveOnHunger} жителя ушли!`;
+      haptic("warning");
+    }
+    notes.push(msg);
+  }
+}
+
 // применяет эффекты выбора или onEnter
 function applyEffects(e) {
   if (e.once) state.flags[e.once] = true;
@@ -135,15 +188,23 @@ function applyEffects(e) {
     notes.push(`${e.patrons > 0 ? "+" : ""}${e.patrons} патронов`);
     if (e.patrons > 0) Sound.coin();
   }
+  if (e.food) state.food += e.food;
+  if (e.water) state.water += e.water;
+  if (e.people) state.people += e.people;
   list(e.give).forEach(giveItem);
   list(e.take).forEach(takeItem);
   if (e.hp) changeHp(e.hp);
   if (e.xp) addXp(e.xp);
+  if (e.day) passDay(e.day);
 }
 
 // ---------- Сцены ----------
 function goTo(id) {
-  if (state.hp <= 0) id = "dead";
+  if (state.hp <= 0) id = state.chapter === 2 ? "dead2" : "dead";
+  if (state.chapter === 2 && !SCENES[id].ending) {
+    if (state.people < CHAPTER2.minPeople) id = "ch2_lost";
+    else if (state.day > CHAPTER2.deadline) id = "ch2_flooded";
+  }
   const scene = SCENES[id];
   if (!scene) { alert("Нет сцены: " + id); return; }
   state.scene = id;
@@ -154,18 +215,35 @@ function goTo(id) {
 
   if (scene.fight && !state.fight) {
     const f = scene.fight;
-    state.fight = { enemy: f.enemy, hp: ENEMIES[f.enemy].hp, win: f.win, flee: f.flee, winFlag: f.winFlag, log: [] };
+    state.fight = { enemy: f.enemy, hp: ENEMIES[f.enemy].hp, win: f.win, flee: f.flee, winFlag: f.winFlag, turn: 0, log: [] };
   }
+
+  if (scene.checkpoint) storeState(CHECKPOINT_KEY, Object.assign({}, state, { fight: null }));
+  if (id === "dead2") { Sound.death(); haptic("error"); }
 
   if (scene.ending) {
     storeRemove(SAVE_KEY);
     rememberEnding(scene.ending);
-    if (scene.ending === "bad") { Sound.death(); haptic("error"); }
+    if (scene.ending === "good" || scene.ending === "trick") {
+      ch2Hero = JSON.parse(JSON.stringify(state));
+      storeState(CH2_HERO_KEY, ch2Hero);
+    }
+    if (scene.ending === "bad" || scene.ending === "lost2") { Sound.death(); haptic("error"); }
     else { Sound.win(); haptic("success"); }
   } else {
     save();
   }
   render();
+}
+
+async function backToCheckpoint() {
+  const cp = await loadNewest(CHECKPOINT_KEY);
+  if (!cp) { startChapter2(ch2Hero || state); return; }
+  state = cp;
+  notes = ["🛏️ Ты провалялся без сознания целый день."];
+  passDay(1);
+  lastArt = null;
+  goTo(state.scene);
 }
 
 function choiceVisible(c) {
@@ -182,6 +260,8 @@ function pick(c) {
   if (c.cost && state.patrons < c.cost) return;
   haptic("light");
   Sound.click();
+
+  if (c.action === "checkpoint") { backToCheckpoint(); return; }
 
   if (c.chance !== undefined) {
     if (Math.random() < c.chance) {
@@ -203,6 +283,11 @@ function pick(c) {
 // ---------- Бой ----------
 const roll = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 const foe = () => ENEMIES[state.fight.enemy];
+// будет ли следующий удар врага особым
+const specialNext = () => {
+  const sp = foe().special;
+  return sp && (state.fight.turn + 1) % sp.every === 0;
+};
 
 function shake() {
   const a = $("art");
@@ -220,11 +305,18 @@ function allyTurn() {
 }
 
 function enemyTurn() {
-  const e = foe();
-  const dmg = Math.max(1, roll(e.atk[0], e.atk[1]) - armorValue());
+  const f = state.fight, e = foe();
+  f.turn++;
+  const special = e.special && f.turn % e.special.every === 0;
+  let dmg = special ? roll(e.special.dmg[0], e.special.dmg[1]) : roll(e.atk[0], e.atk[1]);
+  dmg = Math.max(1, dmg - armorValue());
+  if (f.defending) dmg = Math.ceil(dmg / 2);
   changeHp(-dmg);
-  state.fight.log.push(`${e.icon} ${e.name} наносит тебе ${dmg} урона.`);
+  const who = special ? `💥 ${e.name}: «${e.special.name}»!` : `${e.icon} ${e.name}:`;
+  f.log.push(`${who} −${dmg} здоровья${f.defending ? " (ты защитился)" : ""}.`);
+  f.defending = false;
   Sound.hurt(0.5);
+  if (special) Sound.boom(0.4);
   haptic("heavy");
   setTimeout(shake, 450);
 }
@@ -276,6 +368,14 @@ function fightAttack() {
     }
     state.fight.log = [msg];
     haptic("light");
+  });
+}
+
+function fightDefend() {
+  fightRound(() => {
+    state.fight.defending = true;
+    state.fight.log = ["🛡️ Ты закрываешься и ждёшь удара."];
+    Sound.click();
   });
 }
 
@@ -344,9 +444,12 @@ function showArt(key) {
 
 function sceneMood(scene) {
   if (state.fight) return "fight";
-  if (scene.ending) return scene.ending === "bad" ? "bad" : "good";
+  if (scene.ending) return scene.ending === "bad" || scene.ending === "lost2" ? "bad" : "good";
   return scene.mood || "under";
 }
+
+// подставляет числа в текст: {people} → 40
+const fill = (text) => text.replace(/\{(\w+)\}/g, (m, k) => (state[k] !== undefined ? state[k] : m));
 
 function renderStats() {
   $("hp-text").textContent = `${state.hp}/${state.maxHp}`;
@@ -359,6 +462,29 @@ function renderStats() {
   $("armor").textContent = armorValue();
   $("ally-chip").hidden = !state.flags.lisa;
   $("inv-count").textContent = state.items.length;
+
+  const ch2 = state.chapter === 2;
+  $("ch2-stats").hidden = !ch2;
+  if (!ch2) return;
+  const need = Math.ceil(state.people / 10);
+  $("day").textContent = `${state.day}`;
+  $("flood").textContent = `${Math.max(0, CHAPTER2.deadline - state.day + 1)}`;
+  $("food").textContent = state.food;
+  $("water").textContent = state.water;
+  $("people").textContent = state.people;
+  $("food-chip").classList.toggle("low", state.food < need);
+  $("water-chip").classList.toggle("low", state.water < (state.flags.goalWater ? Math.ceil(need / 2) : need));
+  $("flood-chip").classList.toggle("low", CHAPTER2.deadline - state.day < 3);
+
+  const done = CHAPTER2.goals.filter((g) => state.flags[g.flag]).length;
+  $("goal-pct").textContent = `${Math.round(100 * done / CHAPTER2.goals.length)}% до свободной игры`;
+  const goals = $("goals");
+  goals.innerHTML = "";
+  CHAPTER2.goals.forEach((g) => {
+    const seg = el("div", "goal" + (state.flags[g.flag] ? " done" : ""), g.icon);
+    seg.title = g.name;
+    goals.appendChild(seg);
+  });
 }
 
 function render() {
@@ -373,7 +499,7 @@ function render() {
 
   $("title").textContent = scene.title;
   const extras = (scene.extra || []).filter((x) => state.flags[x.flag]).map((x) => x.text);
-  $("text").textContent = [scene.text, ...extras].join("\n\n");
+  $("text").textContent = fill([scene.text, ...extras].join("\n\n"));
 
   const notesBox = $("notes");
   notesBox.innerHTML = "";
@@ -391,8 +517,12 @@ function render() {
     const log = $("fight-log");
     log.innerHTML = "";
     fight.log.forEach((l) => log.appendChild(el("div", "", l)));
+    const danger = specialNext();
+    $("enemy-warn").hidden = !danger;
+    if (danger) $("enemy-warn").textContent = `⚠️ ${e.name} готовит «${e.special.name}»! Лучше защититься.`;
 
-    box.appendChild(button(`⚔️ Атаковать (сила ${attackPower()} + 🎲)`, fightAttack, { cls: "attack" }));
+    box.appendChild(button(`⚔️ Атаковать (сила ${attackPower()} + 🎲)`, fightAttack, { cls: danger ? "" : "attack" }));
+    box.appendChild(button("🛡️ Защищаться (урон ×½)", fightDefend, { cls: danger ? "attack" : "" }));
     [...new Set(state.items)].filter((id) => ITEMS[id].heal || ITEMS[id].damage).forEach((id) => {
       const it = ITEMS[id];
       box.appendChild(button(`${it.icon} ${it.name} ×${count(id)}`, () => fightUseItem(id)));
@@ -404,7 +534,23 @@ function render() {
   if (scene.ending) {
     box.appendChild(el("div", "ending " + scene.ending, ENDINGS[scene.ending]));
     box.appendChild(el("div", "muted center", `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`));
-    box.appendChild(button("🔄 Начать заново", newGame, { cls: "attack" }));
+    const hero = JSON.parse(JSON.stringify(state));
+    if (scene.ending === "good" || scene.ending === "trick") {
+      box.appendChild(button("▶️ Глава 2: Новый дом", () => startChapter2(hero), { cls: "attack" }));
+      box.appendChild(button("🔄 Пройти главу 1 заново", newGame));
+    } else if (scene.ending === "home2") {
+      const soon = el("div", "soon");
+      soon.appendChild(el("b", "", "🔓 Свободная игра — скоро!"));
+      soon.appendChild(el("div", "", "Ты будешь строить комнаты на «Глубокой», ставить жителей на работы, следить за энергией, водой и едой и отбиваться от налётов, как в Fallout Shelter."));
+      box.appendChild(soon);
+      box.appendChild(button("🔄 Пройти главу 2 заново", () => startChapter2(ch2Hero)));
+      box.appendChild(button("🏠 В главное меню", showMenu, { cls: "ghost" }));
+    } else if (scene.ending === "lost2") {
+      box.appendChild(button("🔄 Начать главу 2 заново", () => startChapter2(ch2Hero), { cls: "attack" }));
+      box.appendChild(button("🏠 В главное меню", showMenu, { cls: "ghost" }));
+    } else {
+      box.appendChild(button("🔄 Начать заново", newGame, { cls: "attack" }));
+    }
     return;
   }
 
@@ -465,12 +611,13 @@ function updateSoundButtons() {
   $("menu-snd").textContent = icon + (Sound.isMuted() ? " Звук выключен" : " Звук включён");
 }
 function toggleSound() {
-  Sound.init();
   Sound.toggle();
   updateSoundButtons();
 }
-// браузер разрешает звук только после первого касания экрана
-document.addEventListener("pointerdown", () => Sound.init(), { passive: true });
+// браузер (особенно на iPhone) разрешает звук только в ответ на касание
+["touchend", "click", "keydown"].forEach((ev) =>
+  document.addEventListener(ev, () => Sound.unlock(), { passive: true, capture: true })
+);
 
 // ---------- Запуск ----------
 let savedGame = null;
@@ -482,20 +629,22 @@ async function showMenu() {
   $("new-game").disabled = true;
   $("loading").hidden = false;
 
-  [savedGame, endingsSeen] = await Promise.all([loadSave(), loadEndings()]);
+  [savedGame, endingsSeen, ch2Hero] = await Promise.all([loadNewest(SAVE_KEY), loadEndings(), loadNewest(CH2_HERO_KEY)]);
 
   $("loading").hidden = true;
   $("new-game").disabled = false;
   $("continue").hidden = !savedGame;
+  $("chapter2").hidden = !ch2Hero;
   $("menu-endings").textContent = endingsSeen.length
     ? `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`
     : "";
 }
 
-$("new-game").onclick = () => { Sound.init(); lastArt = null; newGame(); };
+$("new-game").onclick = newGame;
+$("chapter2").onclick = () => startChapter2(ch2Hero);
 $("continue").onclick = () => {
-  Sound.init();
   state = savedGame;
+  if (!state.chapter) state.chapter = 1;
   notes = ["💾 Игра загружена"];
   lastArt = null;
   goTo(state.scene);

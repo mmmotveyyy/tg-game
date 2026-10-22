@@ -47,6 +47,27 @@
     }
     .center { text-align: center; }
 
+    /* Глава 2: припасы и шкала «Новый дом» */
+    #ch2-stats { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 6px; }
+    #ch2-stats .low { color: var(--red); font-weight: 700; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: .5; } }
+    .goal-row { color: var(--accent); }
+    .goals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+    .goal {
+      text-align: center; padding: 3px 0; border-radius: 6px; font-size: 15px;
+      background: #000; border: 1px solid var(--line); filter: grayscale(1); opacity: .45;
+    }
+    .goal.done { background: rgba(217,164,65,.25); border-color: var(--accent); filter: none; opacity: 1; }
+    #enemy-warn {
+      margin-top: 8px; padding: 6px 8px; border-radius: 6px; font-size: 14px; font-weight: 700;
+      background: rgba(200,71,58,.25); color: #ffb3a8; animation: blink 1s infinite;
+    }
+    .soon {
+      border: 1px dashed var(--accent); border-radius: 10px; padding: 12px 14px;
+      background: rgba(217,164,65,.08); display: grid; gap: 6px;
+    }
+    .soon b { color: var(--accent); font-family: "PT Mono", monospace; }
+
     /* Меню */
     #menu { text-align: center; padding-top: 4vh; }
     #menu-art { margin-bottom: 18px; }
@@ -157,6 +178,7 @@
       <h1>Последний поезд</h1>
       <p>Текстовая RPG о метро после конца света</p>
       <button id="continue" class="choice attack" hidden>▶️ Продолжить</button>
+      <button id="chapter2" class="choice" hidden>🏠 Глава 2: Новый дом</button>
       <button id="new-game" class="choice">🆕 Новая игра</button>
       <div id="loading">Загрузка сохранения…</div>
       <div id="menu-endings"></div>
@@ -182,6 +204,17 @@
           <button id="inv-btn">🎒 <span id="inv-count"></span></button>
           <button id="snd-btn"></button>
         </div>
+        <div id="ch2-stats" hidden>
+          <div class="chips">
+            <span title="День">📅 <b id="day"></b></span>
+            <span id="flood-chip" title="Дней до затопления">🌊 <b id="flood"></b> дн.</span>
+            <span id="food-chip" title="Еда">🍞 <b id="food"></b></span>
+            <span id="water-chip" title="Вода">💧 <b id="water"></b></span>
+            <span title="Жители">👥 <b id="people"></b></span>
+          </div>
+          <div class="row goal-row"><span>🏗️ Новый дом</span><span id="goal-pct"></span></div>
+          <div id="goals" class="goals"></div>
+        </div>
       </div>
 
       <div id="art" class="art"></div>
@@ -192,6 +225,7 @@
       <div id="enemy" hidden>
         <div class="row"><span id="enemy-name"></span><span id="enemy-hp"></span></div>
         <div class="bar"><div id="enemy-fill"></div></div>
+        <div id="enemy-warn" hidden></div>
         <div id="fight-log"></div>
       </div>
 
@@ -209,7 +243,9 @@
   </div>
 
   <script src="story.js"></script>
+  <script src="story2.js"></script>
   <script src="art.js"></script>
+  <script src="art2.js"></script>
   <script src="audio.js"></script>
   <script src="game.js"></script>
 </body>

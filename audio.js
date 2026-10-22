@@ -8,7 +8,44 @@ const Sound = (() => {
   let ctx = null, master, music, fx, droneF, droneG, windG, noiseBuf;
   let mood = "under", step = 0;
   let muted = false;
+  let silentTrack = null;
   try { muted = localStorage.getItem("lt-muted") === "1"; } catch (e) {}
+
+  // iPhone: просим систему считать игру «плеером», тогда звук слышен даже в беззвучном режиме
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+
+  // беззвучная WAV-дорожка: на старых iPhone её проигрывание тоже снимает глушение звука
+  function silentWavUrl() {
+    const n = 4000, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    w(36, "data"); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+
+  // вызывается при каждом касании: включает звук, если система его приостановила
+  function unlock() {
+    init();
+    if (!ctx || muted) return;
+    if (ctx.state !== "running") ctx.resume().catch(() => {});
+    try {
+      const s = ctx.createBufferSource();
+      s.buffer = ctx.createBuffer(1, 1, 22050);
+      s.connect(ctx.destination);
+      s.start(0);
+    } catch (e) {}
+    try {
+      if (!silentTrack) {
+        silentTrack = new Audio(silentWavUrl());
+        silentTrack.loop = true;
+        silentTrack.setAttribute("playsinline", "");
+      }
+      if (silentTrack.paused) silentTrack.play().catch(() => {});
+    } catch (e) {}
+  }
 
   // notes — из каких нот собирается мелодия, pad — как часто звучит нота (в тиках по 0.25 с)
   const MOODS = {
@@ -67,9 +104,9 @@ const Sound = (() => {
     src.stop(t + dur + 0.05);
   }
 
-  // запускается по первому касанию экрана (браузеры не дают играть звук раньше)
+  // создаёт звуковой движок (браузеры не дают играть звук до первого касания экрана)
   function init() {
-    if (ctx) { if (ctx.state === "suspended" && !document.hidden) ctx.resume(); return; }
+    if (ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
@@ -124,7 +161,13 @@ const Sound = (() => {
 
     setInterval(tick, 250);
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) ctx.suspend(); else ctx.resume();
+      if (document.hidden) {
+        ctx.suspend();
+        if (silentTrack) silentTrack.pause();
+      } else if (!muted) {
+        ctx.resume().catch(() => {});
+        if (silentTrack) silentTrack.play().catch(() => {});
+      }
     });
     applyMood();
   }
@@ -167,6 +210,8 @@ const Sound = (() => {
     muted = !muted;
     try { localStorage.setItem("lt-muted", muted ? "1" : "0"); } catch (e) {}
     if (ctx) master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.1);
+    if (muted && silentTrack) silentTrack.pause();
+    if (!muted) unlock();
     return muted;
   }
 
@@ -174,7 +219,7 @@ const Sound = (() => {
   const sfx = (fn) => (when = 0) => { if (ctx && !muted) fn(when); };
 
   return {
-    init,
+    unlock,
     setMood,
     toggle,
     isMuted: () => muted,
