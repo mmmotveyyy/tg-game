@@ -106,6 +106,66 @@ function storeGetAll(keys) {
 }
 const parse = (v) => { try { return JSON.parse(v); } catch (e) { return null; } };
 
+// ---------- Большие сохранения (убежище) ----------
+// В облаке Telegram одна запись — не больше 4 КБ, поэтому большое сохранение режется на части.
+// Части пишутся в запасной слот (0 или 1), и только когда дошли все, «указатель» переключается на него.
+// Так оборванная запись никогда не портит предыдущее сохранение.
+const CHUNK = 3800;
+const bigQueue = {}; // ключ → { busy, pending, slot }
+function storeBigSet(key, obj) {
+  obj.t = Date.now();
+  const s = JSON.stringify(obj);
+  try { localStorage.setItem(key, s); } catch (e) {}
+  if (!cloud) return;
+  const b = bigQueue[key] || (bigQueue[key] = { busy: false, pending: null, slot: 0 });
+  b.pending = s;
+  bigPump(key);
+}
+function bigPump(key) {
+  const b = bigQueue[key];
+  if (b.busy || !b.pending) return;
+  const s = b.pending;
+  b.pending = null;
+  b.busy = true;
+  cloudStatus.pending++;
+  const slot = 1 - b.slot;
+  const n = Math.ceil(s.length / CHUNK);
+  let left = n, failed = false;
+  const finish = (ok) => {
+    b.busy = false;
+    cloudStatus.pending--;
+    if (ok) { b.slot = slot; cloudStatus.lastError = null; bigPump(key); return; }
+    cloudStatus.lastError = "не записалось";
+    if (!b.pending) b.pending = s;
+    setTimeout(() => bigPump(key), 2000);
+  };
+  for (let i = 0; i < n; i++) {
+    try {
+      cloud.setItem(`${key}_${slot}_${i}`, s.slice(i * CHUNK, (i + 1) * CHUNK), (err, ok) => {
+        if (err || ok === false) failed = true;
+        if (--left > 0) return;
+        if (failed) return finish(false);
+        try { cloud.setItem(`${key}_m`, `${slot}|${n}`, (e2, ok2) => finish(!(e2 || ok2 === false))); } catch (e) { finish(false); }
+      });
+    } catch (e) { failed = true; if (--left === 0) finish(false); }
+  }
+}
+async function storeBigGet(key) {
+  let local = null;
+  try { local = parse(localStorage.getItem(key)); } catch (e) {}
+  if (!cloud) return local;
+  let fromCloud = null;
+  const meta = (await storeGetAll([key + "_m"]))[key + "_m"][1];
+  if (meta) {
+    const [slot, n] = meta.split("|");
+    const keys = Array.from({ length: +n }, (_, i) => `${key}_${slot}_${i}`);
+    const parts = await storeGetAll(keys);
+    fromCloud = parse(keys.map((k) => parts[k][1] || "").join(""));
+    if (bigQueue[key]) bigQueue[key].slot = +slot; else bigQueue[key] = { busy: false, pending: null, slot: +slot };
+  }
+  return [local, fromCloud].filter(Boolean).sort((a, b) => (b.t || 0) - (a.t || 0))[0] || null;
+}
+
 // из нескольких копий сохранения берёт самую свежую
 function newest(copies) {
   const good = copies.map(parse).filter((s) => s && (!s.scene || SCENES[s.scene]));
@@ -597,9 +657,10 @@ function render() {
       box.appendChild(button("🔄 Пройти главу 1 заново", newGame));
     } else if (scene.ending === "home2") {
       const soon = el("div", "soon");
-      soon.appendChild(el("b", "", "🔓 Свободная игра — скоро!"));
-      soon.appendChild(el("div", "", "Ты будешь строить комнаты на «Глубокой», ставить жителей на работы, следить за энергией, водой и едой и отбиваться от налётов, как в Fallout Shelter."));
+      soon.appendChild(el("b", "", "🔓 Открыта свободная игра!"));
+      soon.appendChild(el("div", "", "Обустрой «Глубокую»: строй комнаты, ставь жителей на работы, следи за энергией, водой и едой, отправляй людей на вылазки и отбивайся от налётов."));
       box.appendChild(soon);
+      box.appendChild(button("🏗️ В убежище «Глубокая»", () => Shelter.open(hero), { cls: "attack" }));
       box.appendChild(button("🔄 Пройти главу 2 заново", () => startChapter2(ch2Hero)));
       box.appendChild(button("🏠 В главное меню", showMenu, { cls: "ghost" }));
     } else if (scene.ending === "lost2") {
@@ -690,8 +751,10 @@ async function showMenu() {
   $("chapter2").hidden = true;
   $("cloud-status").textContent = "";
 
-  // всё читаем одним запросом к облаку
-  const all = await storeGetAll([SAVE_KEY, CH2_HERO_KEY, PROGRESS_KEY, ENDINGS_KEY]);
+  $("shelter-btn").hidden = true;
+
+  // всё читаем одним запросом к облаку (убежище — отдельно, оно хранится частями)
+  const [all] = await Promise.all([storeGetAll([SAVE_KEY, CH2_HERO_KEY, PROGRESS_KEY, ENDINGS_KEY]), Shelter.load()]);
   savedGame = newest(all[SAVE_KEY]);
   ch2Hero = newest(all[CH2_HERO_KEY]);
   const prog = newest(all[PROGRESS_KEY]) || {};
@@ -720,8 +783,14 @@ async function showMenu() {
   $("chapter2").textContent = progress.ch2 ? "🔁 Переиграть главу 2" : inCh2 ? "🔁 Начать главу 2 заново" : "🏠 Глава 2: Новый дом";
   $("chapter2").className = "choice" + (progress.ch2 || inCh2 ? " ghost" : "");
 
+  // убежище открывается после главы 2; если оно уже есть — это главная кнопка меню
+  const shelterOpen = progress.ch2 || Shelter.exists();
+  $("shelter-btn").hidden = !shelterOpen;
+  $("shelter-btn").textContent = Shelter.exists() ? "🏗️ Убежище «Глубокая»" : "🏗️ Свободная игра: убежище «Глубокая»";
+  $("continue").className = "choice" + (shelterOpen ? "" : " attack");
+
   $("menu-progress").textContent =
-    `Глава 1 ${progress.ch1 ? "✅" : "▫️"}   Глава 2 ${progress.ch2 ? "✅" : progress.ch1 ? "▶️" : "🔒"}   Свободная игра ${progress.ch2 ? "⏳ скоро" : "🔒"}`;
+    `Глава 1 ${progress.ch1 ? "✅" : "▫️"}   Глава 2 ${progress.ch2 ? "✅" : progress.ch1 ? "▶️" : "🔒"}   Убежище ${shelterOpen ? "🏗️" : "🔒"}`;
   $("menu-endings").textContent = endingsSeen.length
     ? `Открыто концовок: ${endingsSeen.length} из ${Object.keys(ENDINGS).length}`
     : "";
@@ -772,6 +841,7 @@ $("continue").onclick = () => {
   goTo(state.scene);
 };
 $("cloud-retry").onclick = showMenu;
+$("shelter-btn").onclick = () => Shelter.open(progress.ch2Final || ch2Hero);
 $("inv-btn").onclick = openInventory;
 $("inv-close").onclick = () => { $("inventory").hidden = true; };
 $("inventory").onclick = (ev) => { if (ev.target.id === "inventory") $("inventory").hidden = true; };

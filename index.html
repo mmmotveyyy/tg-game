@@ -6,6 +6,7 @@
   <title>Последний поезд</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+  <link href="shelter.css?v=6" rel="stylesheet">
   <style>
     :root {
       --bg: #14110d;
@@ -186,6 +187,7 @@
       <div id="menu-art" class="art"></div>
       <h1>Последний поезд</h1>
       <p>Текстовая RPG о метро после конца света</p>
+      <button id="shelter-btn" class="choice attack" hidden>🏗️ Убежище «Глубокая»</button>
       <button id="continue" class="choice attack" hidden>▶️ Продолжить</button>
       <button id="chapter2" class="choice" hidden>🏠 Глава 2: Новый дом</button>
       <button id="new-game" class="choice">🆕 Новая игра</button>
@@ -195,7 +197,7 @@
       <button id="menu-snd"></button>
       <div id="cloud-status"></div>
       <button id="cloud-retry" class="small" hidden>🔄 Загрузить из облака ещё раз</button>
-      <div id="version">версия 5</div>
+      <div id="version">версия 6</div>
     </div>
 
     <!-- Игра -->
@@ -244,6 +246,9 @@
 
       <div id="choices"></div>
     </div>
+
+    <!-- Свободная игра: убежище «Глубокая» (рисует shelter.js) -->
+    <div id="shelter" hidden></div>
   </div>
 
   <div id="save-badge" hidden></div>
@@ -257,13 +262,15 @@
     </div>
   </div>
 
-  <!-- ?v=5 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
+  <!-- ?v=6 — номер версии: при обновлении игры увеличивай его (и надпись «версия» выше),
        чтобы Telegram не показывал старую копию из кэша -->
-  <script src="story.js?v=5"></script>
-  <script src="story2.js?v=5"></script>
-  <script src="art.js?v=5"></script>
-  <script src="art2.js?v=5"></script>
-  <script src="audio.js?v=5"></script>
-  <script src="game.js?v=5"></script>
+  <script src="story.js?v=6"></script>
+  <script src="story2.js?v=6"></script>
+  <script src="art.js?v=6"></script>
+  <script src="art2.js?v=6"></script>
+  <script src="audio.js?v=6"></script>
+  <script src="shelter-data.js?v=6"></script>
+  <script src="shelter.js?v=6"></script>
+  <script src="game.js?v=6"></script>
 </body>
 </html>
